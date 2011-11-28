@@ -1,6 +1,5 @@
 #!/usr/bin/env python
-import Settings
-import os
+from Model import Model, ImageFile
 
 from PySide import QtCore, QtGui
 
@@ -10,39 +9,50 @@ class View(QtGui.QMainWindow):
         self.window = Window()
         self.setCentralWidget(self.window)
 
-        self.initSignals()
+        self.initActions()
+        self.initMenus()
 
-    def initSignals(self):
-        exitAction = QtGui.QAction('&Exit', self)
-        exitAction.setShortcut("Ctrl+Q")
-        exitAction.setStatusTip("&Exit the application")
-        exitAction.triggered.connect(self.close)
+        self.resize(800,600)
 
-        helpAction = QtGui.QAction('&Info', self)
-        helpAction.setShortcut('F1')
-        helpAction.setStatusTip("Show help menu")
-        helpAction.triggered.connect(self.showHelpDialog)
+    def initActions(self):
+        self.openAct = QtGui.QAction("&Open...", self, shortcut="Ctrl+O", triggered=self.showLoadDialog)
+        self.exitAct = QtGui.QAction("&Exit", self, shortcut="Ctrl+Q",  triggered=self.close)
+        self.aboutAct = QtGui.QAction("&About", self, triggered=self.showHelpDialog)
+        self.aboutQtAct = QtGui.QAction("About &Qt", self, triggered=QtGui.qApp.aboutQt)
 
-        menuBar = self.menuBar()
-        fileMenu = menuBar.addMenu('&File')
-        helpMenu = menuBar.addMenu('&Help')
+    def initMenus(self):
+        self.fileMenu = QtGui.QMenu("&File", self)
+        self.fileMenu.addAction(self.exitAct)
+        self.fileMenu.addAction(self.openAct)
+        self.fileMenu.addSeparator()
+        self.fileMenu.addAction(self.exitAct)
 
-        fileMenu.addAction(exitAction)
-        helpMenu.addAction(helpAction)
+        self.helpMenu = QtGui.QMenu("&Help", self)
+        self.helpMenu.addAction(self.aboutAct)
+        self.helpMenu.addAction(self.aboutQtAct)
+
+        self.menuBar().addMenu(self.fileMenu)
+        self.menuBar().addMenu(self.helpMenu)
 
     def showHelpDialog(self):
         pass
 
+    def showLoadDialog(self):
+        fileName = QtGui.QFileDialog.getExistingDirectory(self, 'Open File', QtCore.QDir.currentPath())
+        self.window.model.loadImages(fileName)
+
 
 class Window(QtGui.QWidget):
-    loadImages = QtCore.Signal(str)
-    
     def __init__(self, parent=None):
         super(Window, self).__init__(parent)
+        self.model = Model()
+        self.model.imagesLoadedSignal.connect(self.displayImage)
+
         self.imageLabel = QtGui.QLabel()
         self.imageLabel.setBackgroundRole(QtGui.QPalette.Base)
-        self.imageLabel.setSizePolicy(QtGui.QSizePolicy.Ignored,QtGui.QSizePolicy.Ignored)
-        self.imageLabel.setScaledContents(True)
+        self.imageLabel.setSizePolicy(QtGui.QSizePolicy.Ignored, QtGui.QSizePolicy.Ignored)
+        self.imageLabel.setScaledContents(False)
+        self.imageLabel.resize(800,600)
 
         self.scrollArea = ScrollArea()
         self.scrollArea.setBackgroundRole(QtGui.QPalette.Dark)
@@ -52,91 +62,112 @@ class Window(QtGui.QWidget):
         layout.addWidget(self.scrollArea)
         self.setLayout(layout)
 
-        self.scrollArea.nextImage.connect(self.nextImage)
-        self.scrollArea.prevImage.connect(self.prevImage)
-
-        self.images = []
-        self.numImages = 0
-        self.currentImage = 1
-
-        self.loadImagesFromDir()
-        self.imageLabel.setGeometry(0,0, 640, 480)
-
-    def loadImagesFromDir(self, directory=r'C:\Users\Dan\Scripts\python\comic_reader\imgs\test'):
-        if not os.path.exists(directory):
-            return False
-
-        files = os.listdir(directory)
-        for f in files:
-            #Check Ext
-            img = ImageFile(os.path.join(directory,f))
-            self.images.append(img)
-
-        self.numImages = len(self.images)
-        self.displayImage(self.images[-1])
-
-    def loadImagesFromCbz(self, path):
-        pass
-
-    def loadImagesFromCbr(self, path):
-        pass
+        self.scrollArea.nextImageSignal.connect(self.nextImage)
+        self.scrollArea.prevImageSignal.connect(self.prevImage)
 
     def nextImage(self):
-        if self.currentImage < self.numImages:
-            img = self.images[self.currentImage-1]
-            self.currentImage += 1
-            self.displayImage(img)
-        else:
-            self.displayImage(self.images[-1])
+        self.displayImage(self.model.getNextImage())
 
     def prevImage(self):
-        if self.currentImage > 0:
-            img = self.images[self.currentImage-1]
-            self.currentImage -= 1
-            self.displayImage(img)
-        else:
-            self.displayImage(self.images[0])
+        self.displayImage(self.model.getPrevImage())
 
+    @QtCore.Slot(ImageFile)
     def displayImage(self, img):
-        if img.image.isNull():
+        if not img:
             return
-        print "Displaying {}/{}".format(self.currentImage, self.numImages)
+        
+        if img.image.isNull():
+            print "Unable to display {}".format(self.model.currentImage)
+            return
+        
+        print "Displaying {}/{}".format(self.model.currentImage, self.model.numberOfImages)
         self.imageLabel.setPixmap(img.pixmap)
+        self.imageLabel.resize(img.size)
 
 
 class ScrollArea(QtGui.QScrollArea):
-    nextImage = QtCore.Signal()
-    prevImage = QtCore.Signal()
+    nextImageSignal = QtCore.Signal()
+    prevImageSignal = QtCore.Signal()
 
     def __init__(self, parent=None):
         super(ScrollArea, self).__init__(parent)
+        self.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
+        self.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
+        self.buttonDown = False
+        self.nextPageCount = 0
+        self.prevPageCount = 0
+
+    def mousePressEvent(self, event):
+        if event.button() == QtCore.Qt.MouseButton.LeftButton:
+            self.buttonDown = True
+
+    def mouseMoveEvent(self, event):
+        if self.buttonDown:
+            vert = self.verticalScrollBar()
+            hori = self.horizontalScrollBar()
+            vert.setValue(event.pos().y())
+            hori.setValue(event.pos().x())
+
+    def mouseReleaseEvent(self, event):
+        self.buttonDown = False
 
     def wheelEvent(self, event):
-        s = self.verticalScrollBar()
-        step = event.delta() / 8
-        scrollingUp = event.delta() < 0
-        s.setSingleStep(abs(step))
+        step = event.delta()
+        scrollingUp = (event.delta() < 0)
 
-        if event.modifiers() & QtCore.Qt.ControlModifier:
+        if event.modifiers() & QtCore.Qt.ControlModifier or self.buttonDown:
             if scrollingUp:
-                self.nextImage.emit()
+                self.nextImageSignal.emit()
             else:
-                self.prevImage.emit()
+                self.prevImageSignal.emit()
+            event.accept()
             return
 
+        vert = self.verticalScrollBar()
+        hori = self.horizontalScrollBar()
+        vert.setSingleStep(abs(step))
+        hori.setSingleStep(abs(step))
+
         if scrollingUp:
-            s.triggerAction(QtGui.QAbstractSlider.SliderSingleStepAdd)
+            if vert.value() == vert.maximum():
+                #If we reached the lowest part of the page begin to scroll right
+                hori.triggerAction(QtGui.QAbstractSlider.SliderSingleStepAdd)
+            else:
+                vert.triggerAction(QtGui.QAbstractSlider.SliderSingleStepAdd)
         else:
-            s.triggerAction(QtGui.QAbstractSlider.SliderSingleStepSub)
+            if vert.value() == vert.minimum():
+                #If we reached the highest part of the page then begin to scroll left
+                hori.triggerAction(QtGui.QAbstractSlider.SliderSingleStepSub)
+            else:
+                vert.triggerAction(QtGui.QAbstractSlider.SliderSingleStepSub)
+        
+        if vert.value() == vert.maximum() and hori.value() == hori.maximum():
+            #If we are at the bottom of the page and keep scrolling down then
+            # go to the next page
+            if not self.nextPageCount == 2:
+                self.nextPageCount += 1
+                return
+
+            self.nextImageSignal.emit()
+            vert.setValue(vert.minimum())
+            hori.setValue(hori.minimum())
+            self.nextPageCount = 0
+        elif vert.value() == vert.minimum() and hori.value() == hori.minimum():
+            #If we are at the top of the page and keep scrolling up then go
+            #to the previous page
+            if not self.prevPageCount == 2:
+                self.prevPageCount += 1
+                return
+
+            self.prevImageSignal.emit()
+            vert.setValue(vert.maximum())
+            hori.setValue(hori.maximum())
+            self.prevPageCount = 0
+        else:
+            self.prevPageCount = 0
+            self.nextPageCount = 0
 
         event.accept()
-    
-
-class ImageFile(object):
-    def __init__(self, imgPath):
-        self.image = QtGui.QImage(imgPath)
-        self.pixmap = QtGui.QPixmap.fromImage(self.image)
-
 
 if __name__ == '__main__':
     app = QtGui.QApplication('app')
