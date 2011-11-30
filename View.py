@@ -46,7 +46,6 @@ class Window(QtGui.QWidget):
     def __init__(self, parent=None):
         super(Window, self).__init__(parent)
         self.model = Model()
-        self.model.imagesLoadedSignal.connect(self.displayImage)
 
         self.imageLabel = QtGui.QLabel()
         self.imageLabel.setBackgroundRole(QtGui.QPalette.Base)

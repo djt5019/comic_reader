@@ -20,49 +20,27 @@ class ImageFile(object):
 
 
 
-class Model(QtCore.QObject):
-    imagesLoadedSignal = QtCore.Signal((ImageFile,))
-
+class Model(object):
     def __init__(self):
-        super(Model, self).__init__(None)
         self.images = []
         self.currentImage = 0
         self.numberOfImages = 0
+        self.loaderThread = ImageLoaderThread(self.images)
+        self.loaderThread.finished.connect(self._getImagesFromThread)
 
     def loadImages(self, path):
         path = path.lower()
         self.images = []
         self.currentImage = 0
         self.numberOfImages = 0
+        self.loaderThread.path = path
+        self.loaderThread.images = self.images
+        self.loaderThread.start()
 
-        if os.path.isdir(path):
-            self.loadImagesFromDir(path)
-        elif path.endswith('.cbz') or path.endswith('.zip'):
-            self.loadImagesFromCbz(path)
-        elif path.endswith('.cbr') or path.endswith('rar'):
-            self.loadImagesFromCbr(path)
-        else:
-            raise FileUnsupported('File type is unsupported')
-
-    def loadImagesFromDir(self, directory=r'C:\Users\Dan\Scripts\python\comic_reader\.idea\imgs\test1'):
-        if not os.path.exists(directory):
-            return False
-
-        files = os.listdir(directory)
-        for f in files:
-            if os.path.isfile(os.path.join(directory,f)):
-                img = ImageFile(os.path.join(directory,f))
-                if not img.isNull:
-                    self.images.append(img)
-
-        self.numberOfImages = len(self.images)
-        self.imagesLoadedSignal.emit(self.images[0])
-
-    def loadImagesFromCbz(self, path):
-        pass
-
-    def loadImagesFromCbr(self, path):
-        pass
+    def _getImagesFromThread(self):
+        if self.loaderThread.isFinished():
+            self.images = self.loaderThread.images
+            self.numberOfImages = len(self.images)
 
     def getNextImage(self):
         if not self.images:
@@ -83,6 +61,33 @@ class Model(QtCore.QObject):
             return self.images[self.currentImage-1]
         else:
             return self.images[0]
+
+
+class ImageLoaderThread(QtCore.QThread):
+    def __init__(self, path=None, images=None, parent=None):
+        super(ImageLoaderThread,self).__init__(parent)
+        self.images = images
+        self.path = path
+
+    def run(self):
+        if not self.path and not self.images:
+            return
+
+        if os.path.isdir(self.path):
+            self.loadImagesFromDir(self.path)
+        else:
+            raise FileUnsupported('File type is unsupported')
+
+    def loadImagesFromDir(self, directory=r'C:\Users\Dan\Scripts\python\comic_reader\.idea\imgs\test1'):
+        if not os.path.exists(directory):
+            return False
+
+        files = os.listdir(directory)
+        for f in files:
+            if os.path.isfile(os.path.join(directory,f)):
+                img = ImageFile(os.path.join(directory,f))
+                if not img.isNull:
+                    self.images.append(img)
 
 
 class FileUnsupported(Exception):
