@@ -3,8 +3,12 @@ import os
 from PySide import QtGui, QtCore
 
 class ImageFile(object):
-    def __init__(self, imgPath):
-        self.image = QtGui.QImage(imgPath)
+    def __init__(self, imgPath=None, file=None):
+        if imgPath:
+            self.image = QtGui.QImage(imgPath)
+        else:
+            self.image = file
+
         self.pixmap = QtGui.QPixmap.fromImage(self.image)
 
         if self.image.isNull():
@@ -22,6 +26,7 @@ class ImageFile(object):
 
 class Model(object):
     def __init__(self):
+        self.scaleFactor = 0.0
         self.images = []
         self.currentImage = 0
         self.numberOfImages = 0
@@ -36,6 +41,7 @@ class Model(object):
 
     def loadImages(self, path):
         path = path.lower()
+        self.scaleFactor = 1.0
         self.images = []
         self.currentImage = 0
         self.numberOfImages = 0
@@ -68,6 +74,13 @@ class Model(object):
         else:
             return self.images[0]
 
+    def zoomImage(self, factor=.25):
+        self.scaleFactor *= factor
+        img = self.images[self.currentImage]
+        img = img.image.scaled(img.size * self.scaleFactor, QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation)
+        return ImageFile(file=img)
+
+    
 
 class ImageLoaderThread(QtCore.QThread):
     def __init__(self, path=None, images=None, parent=None):
@@ -75,6 +88,7 @@ class ImageLoaderThread(QtCore.QThread):
         self.images = images
         self.path = path
 
+    #noinspection PyMethodOverriding
     def run(self):
         if not self.path and not self.images:
             return

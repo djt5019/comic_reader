@@ -80,6 +80,8 @@ class Window(QtGui.QWidget):
 
         self.scrollArea.nextImageSignal.connect(self.nextImage)
         self.scrollArea.prevImageSignal.connect(self.prevImage)
+        self.scrollArea.zoomInSignal.connect(self.zoomIn)
+        self.scrollArea.zoomOutSignal.connect(self.zoomOut)
 
     def resizeEvent(self, event):
         self.imageLabel.resize(event.size())
@@ -94,6 +96,18 @@ class Window(QtGui.QWidget):
         if self.model.hasPrevImage():
             self.displayImage(self.model.getPrevImage())
             self.scrollArea.resetPrevPageCoordinates()
+
+    def zoomIn(self):
+        factor = 1.25
+        self.displayImage(self.model.zoomImage(factor))
+
+    def zoomOut(self):
+        factor = 0.8
+        self.displayImage(self.model.zoomImage(factor))
+
+    def adjustScrollBar(self, scrollBar, factor):
+        scrollBar.setValue(int(factor * scrollBar.value()
+                                + ((factor - 1) * scrollBar.pageStep()/2)))
 
     @QtCore.Slot(ImageFile)
     def displayImage(self, img):
@@ -112,6 +126,8 @@ class Window(QtGui.QWidget):
 class ScrollArea(QtGui.QScrollArea):
     nextImageSignal = QtCore.Signal()
     prevImageSignal = QtCore.Signal()
+    zoomInSignal = QtCore.Signal()
+    zoomOutSignal = QtCore.Signal()
 
     def __init__(self, parent=None):
         super(ScrollArea, self).__init__(parent)
@@ -153,9 +169,9 @@ class ScrollArea(QtGui.QScrollArea):
 
         if event.modifiers() & QtCore.Qt.ControlModifier or self.buttonDown:
             if scrollingUp:
-                self.nextImageSignal.emit()
+                self.zoomInSignal.emit()
             else:
-                self.prevImageSignal.emit()
+                self.zoomOutSignal.emit()
             event.accept()
             return
 
