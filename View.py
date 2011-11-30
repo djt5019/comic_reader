@@ -17,8 +17,9 @@ class View(QtGui.QMainWindow):
     def initActions(self):
         self.openAct = QtGui.QAction("&Open...", self, shortcut="Ctrl+O", triggered=self.showLoadDialog)
         self.exitAct = QtGui.QAction("&Exit", self, shortcut="Ctrl+Q",  triggered=self.close)
-        self.aboutAct = QtGui.QAction("&About", self, triggered=self.showHelpDialog)
+        self.aboutAct = QtGui.QAction("&About", self, shortcut="F1", triggered=self.showHelpDialog)
         self.aboutQtAct = QtGui.QAction("About &Qt", self, triggered=QtGui.qApp.aboutQt)
+        self.fullScreen = QtGui.QAction("&Toggle Full Screen", self, shortcut="F2", triggered=self.toggleFullScreen)
 
     def initMenus(self):
         self.fileMenu = QtGui.QMenu("&File", self)
@@ -31,16 +32,31 @@ class View(QtGui.QMainWindow):
         self.helpMenu.addAction(self.aboutAct)
         self.helpMenu.addAction(self.aboutQtAct)
 
+        self.viewMenu = QtGui.QMenu("&View", self)
+        self.viewMenu.addAction(self.fullScreen)
+
         self.menuBar().addMenu(self.fileMenu)
+        self.menuBar().addMenu(self.viewMenu)
         self.menuBar().addMenu(self.helpMenu)
 
+
     def showHelpDialog(self):
+        print "HELP"
         pass
 
     def showLoadDialog(self):
         fileName = QtGui.QFileDialog.getExistingDirectory(self, 'Open File', QtCore.QDir.currentPath())
         self.window.model.loadImages(fileName)
 
+    def contextMenuEvent(self, event):
+        pass
+
+    def toggleFullScreen(self):
+        if self.isFullScreen():
+            self.showNormal()
+        else:
+            self.showFullScreen()
+            
 
 class Window(QtGui.QWidget):
     def __init__(self, parent=None):
@@ -56,6 +72,7 @@ class Window(QtGui.QWidget):
         self.scrollArea = ScrollArea()
         self.scrollArea.setBackgroundRole(QtGui.QPalette.Dark)
         self.scrollArea.setWidget(self.imageLabel)
+        self.scrollArea.setAlignment(QtCore.Qt.AlignCenter)
 
         layout = QtGui.QVBoxLayout()
         layout.addWidget(self.scrollArea)
@@ -64,11 +81,19 @@ class Window(QtGui.QWidget):
         self.scrollArea.nextImageSignal.connect(self.nextImage)
         self.scrollArea.prevImageSignal.connect(self.prevImage)
 
+    def resizeEvent(self, event):
+        self.imageLabel.resize(event.size())
+        self.scrollArea.resize(event.size())
+
     def nextImage(self):
-        self.displayImage(self.model.getNextImage())
+        if self.model.hasNextImage():
+            self.displayImage(self.model.getNextImage())
+            self.scrollArea.resetNextPageCoordinates()
 
     def prevImage(self):
-        self.displayImage(self.model.getPrevImage())
+        if self.model.hasPrevImage():
+            self.displayImage(self.model.getPrevImage())
+            self.scrollArea.resetPrevPageCoordinates()
 
     @QtCore.Slot(ImageFile)
     def displayImage(self, img):
@@ -95,6 +120,18 @@ class ScrollArea(QtGui.QScrollArea):
         self.buttonDown = False
         self.nextPageCount = 0
         self.prevPageCount = 0
+
+    def resetNextPageCoordinates(self):
+        vert = self.verticalScrollBar()
+        hori = self.horizontalScrollBar()
+        vert.setValue(vert.minimum())
+        hori.setValue(hori.minimum())
+
+    def resetPrevPageCoordinates(self):
+        vert = self.verticalScrollBar()
+        hori = self.horizontalScrollBar()
+        vert.setValue(vert.maximum())
+        hori.setValue(hori.maximum())
 
     def mousePressEvent(self, event):
         if event.button() == QtCore.Qt.MouseButton.LeftButton:
@@ -139,7 +176,7 @@ class ScrollArea(QtGui.QScrollArea):
                 hori.triggerAction(QtGui.QAbstractSlider.SliderSingleStepSub)
             else:
                 vert.triggerAction(QtGui.QAbstractSlider.SliderSingleStepSub)
-        
+
         if vert.value() == vert.maximum() and hori.value() == hori.maximum():
             #If we are at the bottom of the page and keep scrolling down then
             # go to the next page
@@ -148,8 +185,6 @@ class ScrollArea(QtGui.QScrollArea):
                 return
 
             self.nextImageSignal.emit()
-            vert.setValue(vert.minimum())
-            hori.setValue(hori.minimum())
             self.nextPageCount = 0
         elif vert.value() == vert.minimum() and hori.value() == hori.minimum():
             #If we are at the top of the page and keep scrolling up then go
@@ -159,12 +194,11 @@ class ScrollArea(QtGui.QScrollArea):
                 return
 
             self.prevImageSignal.emit()
-            vert.setValue(vert.maximum())
-            hori.setValue(hori.maximum())
             self.prevPageCount = 0
         else:
             self.prevPageCount = 0
             self.nextPageCount = 0
+
 
         event.accept()
 
@@ -173,3 +207,4 @@ if __name__ == '__main__':
     test = View()
     test.show()
     app.exec_()
+    

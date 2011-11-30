@@ -28,6 +28,12 @@ class Model(object):
         self.loaderThread = ImageLoaderThread(self.images)
         self.loaderThread.finished.connect(self._getImagesFromThread)
 
+    def hasNextImage(self):
+        return self.currentImage != self.numberOfImages-1
+
+    def hasPrevImage(self):
+        return self.currentImage != 0
+
     def loadImages(self, path):
         path = path.lower()
         self.images = []
